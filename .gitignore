@@ -1,0 +1,35 @@
+# Dependencies
+/vendor/bundle
+/.bundle
+
+# Environment
+.env
+.env.local
+*.pem
+
+# Logs
+*.log
+log/
+
+# Temp
+/tmp
+*.swp
+*.swo
+*~
+
+# Testing
+/coverage
+/spec/reports
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Ruby
+*.gemspec
+.lock
