@@ -34,5 +34,59 @@ module AgGenie
         ]
       )
     end
+
+    # =========================================================================
+    # POST /api/v1/compare - Compare two options using Comparator
+    # =========================================================================
+    post '/api/v1/compare' do
+      content_type :json
+
+      # Parse request body
+      body = JSON.parse(request.body.read)
+      
+      player_a = body['player_a']
+      player_b = body['player_b']
+      criteria = body['criteria']
+      provider = body['provider'] || :openai
+      model = body['model']
+
+      # Validation
+      unless player_a && player_b && criteria
+        halt 400, json(
+          error: 'Missing required parameters',
+          required: %w[player_a player_b criteria],
+          received: body.keys
+        )
+      end
+
+      # Build config
+      config = { provider_name: provider.to_sym }
+      config[:model] = model if model
+
+      # Execute Comparator
+      result = ActiveGenie::Comparator.call(player_a, player_b, criteria, config)
+
+      # Return response
+      json(
+        success: true,
+        data: {
+          winner: result.data[:winner],
+          loser: result.data[:loser],
+          reasoning: result.data[:reasoning]
+        },
+        meta: {
+          provider: provider,
+          model: model || 'default'
+        }
+      )
+    rescue ActiveGenie::Error => e
+      logger.error "ActiveGenie error: #{e.message}"
+      halt 500, json(error: 'ActiveGenie processing error', message: e.message)
+    rescue JSON::ParserError => e
+      halt 400, json(error: 'Invalid JSON', message: e.message)
+    rescue StandardError => e
+      logger.error "Unexpected error: #{e.message}"
+      halt 500, json(error: 'Internal server error', message: e.message)
+    end
   end
 end
