@@ -209,5 +209,50 @@ module AgGenie
       logger.error "Unexpected error: #{e.message}"
       halt 500, json(error: 'Internal server error', message: e.message)
     end
+
+    # =========================================================================
+    # POST /api/v1/extract - Extract structured data from unstructured text
+    # =========================================================================
+    post '/api/v1/extract' do
+      content_type :json
+
+      body = JSON.parse(request.body.read)
+      
+      text = body['text']
+      schema = body['schema']
+      provider = body['provider'] || :openai
+      model = body['model']
+
+      unless text && schema
+        halt 400, json(
+          error: 'Missing required parameters',
+          required: %w[text schema],
+          received: body.keys
+        )
+      end
+
+      config = { provider_name: provider.to_sym }
+      config[:model] = model if model
+
+      # Execute Extractor
+      result = ActiveGenie::Extractor.call(text, schema, config)
+
+      json(
+        success: true,
+        data: result.data,
+        meta: {
+          provider: provider,
+          model: model || 'default'
+        }
+      )
+    rescue ActiveGenie::Error => e
+      logger.error "ActiveGenie error: #{e.message}"
+      halt 500, json(error: 'ActiveGenie processing error', message: e.message)
+    rescue JSON::ParserError => e
+      halt 400, json(error: 'Invalid JSON', message: e.message)
+    rescue StandardError => e
+      logger.error "Unexpected error: #{e.message}"
+      halt 500, json(error: 'Internal server error', message: e.message)
+    end
   end
 end
