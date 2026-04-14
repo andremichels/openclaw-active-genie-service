@@ -15,12 +15,16 @@ module AgGenie
     set :logging, true
     set :logger, Logger.new($stdout)
 
-    # Health check endpoint
+    # =========================================================================
+    # GET /health - Health check
+    # =========================================================================
     get '/health' do
       json status: 'ok', timestamp: Time.now.iso8601
     end
 
-    # Root endpoint
+    # =========================================================================
+    # GET / - Root info
+    # =========================================================================
     get '/' do
       json(
         service: 'AgGenie - ActiveGenie Microservice',
@@ -78,6 +82,56 @@ module AgGenie
           provider: provider,
           model: model || 'default'
         }
+      )
+    rescue ActiveGenie::Error => e
+      logger.error "ActiveGenie error: #{e.message}"
+      halt 500, json(error: 'ActiveGenie processing error', message: e.message)
+    rescue JSON::ParserError => e
+      halt 400, json(error: 'Invalid JSON', message: e.message)
+    rescue StandardError => e
+      logger.error "Unexpected error: #{e.message}"
+      halt 500, json(error: 'Internal server error', message: e.message)
+    end
+
+    # =========================================================================
+    # POST /api/v1/score - Evaluate content with AI jury
+    # =========================================================================
+    post '/api/v1/score' do
+      content_type :json
+
+      body = JSON.parse(request.body.read)
+      
+      content = body['content']
+      criteria = body['criteria']
+      reviewers = body['reviewers'] # Optional array
+      provider = body['provider'] || :openai
+      model = body['model']
+
+      unless content && criteria
+        halt 400, json(
+          error: 'Missing required parameters',
+          required: %w[content criteria],
+          received: body.keys
+        )
+      end
+
+      config = { provider_name: provider.to_sym }
+      config[:model] = model if model
+
+      result = if reviewers
+        ActiveGenie::Scorer.call(content, criteria, reviewers, config)
+      else
+        ActiveGenie::Scorer.call(content, criteria, config)
+      end
+
+      json(
+        success: true,
+        data: {
+          scores: result.data.reject { |k, _| k.to_s.end_with?('_reasoning') },
+          reasonings: result.data.select { |k, v| k.to_s.end_with?('_reasoning') },
+          final_score: result.data[:final_score]
+        },
+        meta: { provider: provider, model: model || 'default' }
       )
     rescue ActiveGenie::Error => e
       logger.error "ActiveGenie error: #{e.message}"
