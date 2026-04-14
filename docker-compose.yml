@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  aggenie:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: aggenie
+    ports:
+      - "${PORT:-4567}:4567"
+    environment:
+      - RACK_ENV=${RACK_ENV:-production}
+      - PORT=${PORT:-4567}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4567/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - aggenie-network
+
+networks:
+  aggenie-network:
+    driver: bridge

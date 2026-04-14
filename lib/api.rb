@@ -45,6 +45,7 @@ module AgGenie
     post '/api/v1/compare' do
       content_type :json
 
+      # Parse request body
       body = JSON.parse(request.body.read)
       
       player_a = body['player_a']
@@ -53,6 +54,7 @@ module AgGenie
       provider = body['provider'] || :openai
       model = body['model']
 
+      # Validation
       unless player_a && player_b && criteria
         halt 400, json(
           error: 'Missing required parameters',
@@ -61,11 +63,14 @@ module AgGenie
         )
       end
 
+      # Build config
       config = { provider_name: provider.to_sym }
       config[:model] = model if model
 
+      # Execute Comparator
       result = ActiveGenie::Comparator.call(player_a, player_b, criteria, config)
 
+      # Return response
       json(
         success: true,
         data: {
@@ -73,7 +78,10 @@ module AgGenie
           loser: result.data[:loser],
           reasoning: result.data[:reasoning]
         },
-        meta: { provider: provider, model: model || 'default' }
+        meta: {
+          provider: provider,
+          model: model || 'default'
+        }
       )
     rescue ActiveGenie::Error => e
       logger.error "ActiveGenie error: #{e.message}"
