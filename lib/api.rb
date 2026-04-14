@@ -142,5 +142,72 @@ module AgGenie
       logger.error "Unexpected error: #{e.message}"
       halt 500, json(error: 'Internal server error', message: e.message)
     end
+
+    # =========================================================================
+    # POST /api/v1/rank - Rank multiple items using tournament + ELO
+    # =========================================================================
+    post '/api/v1/rank' do
+      content_type :json
+
+      body = JSON.parse(request.body.read)
+      
+      items = body['items']
+      criteria = body['criteria']
+      provider = body['provider'] || :openai
+      model = body['model']
+
+      unless items && criteria
+        halt 400, json(
+          error: 'Missing required parameters',
+          required: %w[items criteria],
+          received: body.keys
+        )
+      end
+
+      unless items.is_a?(Array) && items.length >= 2
+        halt 400, json(
+          error: 'Items must be an array with at least 2 elements',
+          received_items: items.class.to_s,
+          items_length: items.is_a?(Array) ? items.length : 'N/A'
+        )
+      end
+
+      config = { provider_name: provider.to_sym }
+      config[:model] = model if model
+
+      # Execute Ranker
+      result = ActiveGenie::Ranker.call(items, criteria, config)
+
+      # Format ranking response
+      ranked_data = result.data[:rankings].map.with_index(1) do |item, index|
+        {
+          rank: index,
+          item: item[:item],
+          score: item[:score],
+          elo: item[:elo]
+        }
+      end
+
+      json(
+        success: true,
+        data: {
+          rankings: ranked_data,
+          winner: result.data[:winner],
+          total_items: items.length
+        },
+        meta: {
+          provider: provider,
+          model: model || 'default'
+        }
+      )
+    rescue ActiveGenie::Error => e
+      logger.error "ActiveGenie error: #{e.message}"
+      halt 500, json(error: 'ActiveGenie processing error', message: e.message)
+    rescue JSON::ParserError => e
+      halt 400, json(error: 'Invalid JSON', message: e.message)
+    rescue StandardError => e
+      logger.error "Unexpected error: #{e.message}"
+      halt 500, json(error: 'Internal server error', message: e.message)
+    end
   end
 end
