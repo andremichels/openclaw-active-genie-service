@@ -120,14 +120,18 @@ lib/
 ## Roadmap
 
 - [x] Issue #1: Setup ActiveGenie gem e config inicial
-- [ ] Issue #2: Endpoint /compare (Comparator)
-- [ ] Issue #3: Endpoint /score (Scorer)
-- [ ] Issue #4: Endpoint /rank (Ranker)
-- [ ] Issue #5: Endpoint /extract (Extractor)
-- [ ] Issue #6: Docker setup
-- [ ] Issue #7: Integração com Woz
+- [x] Issue #2: Endpoint /compare (Comparator)
+- [x] Issue #3: Endpoint /score (Scorer)
+- [x] Issue #4: Endpoint /rank (Ranker)
+- [x] Issue #5: Endpoint /extract (Extractor)
+- [x] Issue #6: Docker setup
+- [x] Issue #7: Integração com Woz
 - [ ] Issue #8: Workflow debate entre agentes
 - [ ] Issue #9: Documentação
+
+## Integração com Agentes
+
+Consulte [WOZ_INTEGRATION.md](WOZ_INTEGRATION.md) para detalhes sobre como usar o serviço com o agente Woz.
 
 ---
 
