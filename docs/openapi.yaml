@@ -1,0 +1,429 @@
+openapi: 3.0.3
+info:
+  title: AgGenie - ActiveGenie Microservice
+  description: |
+    Microservice ActiveGenie para o ecossistema de agentes OpenClaw.
+    
+    Ferramentas disponíveis:
+    - **Comparator**: Compara duas opções com debate estruturado
+    - **Scorer**: Avalia conteúdo com jury de especialistas
+    - **Ranker**: Ranqueia múltiplas opções (tournament + ELO)
+    - **Extractor**: Extrai dados estruturados de texto
+  version: 1.0.0
+  contact:
+    name: OpenClaw
+    url: https://github.com/openclaw/openclaw
+
+servers:
+  - url: http://localhost:4567
+    description: Development server
+  - url: http://activegenie:4567
+    description: Docker Compose service
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /:
+    get:
+      summary: Service info
+      tags:
+        - System
+      responses:
+        '200':
+          description: Service information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                  version:
+                    type: string
+                  endpoints:
+                    type: array
+                    items:
+                      type: string
+
+  /api/v1/compare:
+    post:
+      summary: Compare two options
+      description: |
+        Usa o Comparator para comparar duas opções e determinar
+        um vencedor com reasoning estruturado.
+      tags:
+        - Comparator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - player_a
+                - player_b
+                - criteria
+              properties:
+                player_a:
+                  type: string
+                  description: First option to compare
+                  example: "Usar Redis para cache"
+                player_b:
+                  type: string
+                  description: Second option to compare
+                  example: "Usar PostgreSQL com materialized view"
+                criteria:
+                  type: string
+                  description: Evaluation criteria
+                  example: "performance, custo, manutibilidade"
+                provider:
+                  type: string
+                  enum: [openai, anthropic, google]
+                  default: openai
+                  description: AI provider to use
+                model:
+                  type: string
+                  description: Specific model to use (provider-dependent)
+      responses:
+        '200':
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      winner:
+                        type: string
+                      loser:
+                        type: string
+                      reasoning:
+                        type: string
+                  meta:
+                    type: object
+                    properties:
+                      provider:
+                        type: string
+                      model:
+                        type: string
+        '400':
+          description: Missing required parameters
+        '500':
+          description: ActiveGenie processing error
+
+  /api/v1/score:
+    post:
+      summary: Evaluate content with AI jury
+      description: |
+        Usa o Scorer para avaliar conteúdo com um jury de especialistas.
+        Opcionalmente pode usar múltiplos reviewers.
+      tags:
+        - Scorer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+                - criteria
+              properties:
+                content:
+                  type: string
+                  description: Content to evaluate
+                  example: "Tutorial de como instalar o sistema..."
+                criteria:
+                  type: string
+                  description: Evaluation criteria
+                  example: "clareza, completude, utilidade"
+                reviewers:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional array of reviewer names
+                  example: ["expert", "beginner", "editor"]
+                provider:
+                  type: string
+                  enum: [openai, anthropic, google]
+                  default: openai
+                model:
+                  type: string
+      responses:
+        '200':
+          description: Score evaluation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      scores:
+                        type: object
+                      reasonings:
+                        type: object
+                      final_score:
+                        type: number
+                  meta:
+                    type: object
+
+  /api/v1/rank:
+    post:
+      summary: Rank multiple items
+      description: |
+        Usa o Ranker para ranquear múltiplas opções usando
+        tournament style com ELO rating.
+      tags:
+        - Ranker
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - items
+                - criteria
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 2
+                  description: Items to rank
+                  example: ["opcao_a", "opcao_b", "opcao_c"]
+                criteria:
+                  type: string
+                  description: Ranking criteria
+                  example: "qualidade, custo, velocidade"
+                provider:
+                  type: string
+                  enum: [openai, anthropic, google]
+                  default: openai
+                model:
+                  type: string
+      responses:
+        '200':
+          description: Ranking result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      rankings:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            rank:
+                              type: integer
+                            item:
+                              type: string
+                            score:
+                              type: number
+                            elo:
+                              type: number
+                      winner:
+                        type: string
+                      total_items:
+                        type: integer
+                  meta:
+                    type: object
+
+  /api/v1/extract:
+    post:
+      summary: Extract structured data
+      description: |
+        Usa o Extractor para extrair dados estruturados de
+        texto não estruturado baseado em um schema.
+      tags:
+        - Extractor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - text
+                - schema
+              properties:
+                text:
+                  type: string
+                  description: Unstructured text to extract from
+                  example: "João Silva, 35 anos, mora em São Paulo"
+                schema:
+                  type: object
+                  description: Schema definition for extraction
+                  example:
+                    name: string
+                    age: number
+                    city: string
+                provider:
+                  type: string
+                  enum: [openai, anthropic, google]
+                  default: openai
+                model:
+                  type: string
+      responses:
+        '200':
+          description: Extraction result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    description: Extracted data matching schema
+                  meta:
+                    type: object
+
+  /api/v1/debate:
+    post:
+      summary: Multi-agent debate
+      description: |
+        Permite múltiplos agentes apresentarem argumentos e o
+        Comparator arbitra o debate.
+        
+        Cada agente fornece:
+        - agent: nome do agente
+        - position: posição/argumento
+        - reasoning: justificativa (opcional)
+      tags:
+        - Debate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - topic
+                - arguments
+                - criteria
+              properties:
+                topic:
+                  type: string
+                  description: Debate topic/question
+                  example: "Qual tecnologia usar para cache?"
+                arguments:
+                  type: array
+                  minItems: 2
+                  items:
+                    type: object
+                    required:
+                      - agent
+                      - position
+                    properties:
+                      agent:
+                        type: string
+                        example: "Woz"
+                      position:
+                        type: string
+                        example: "Usar Redis pelo ecossistema maduro"
+                      reasoning:
+                        type: string
+                        example: "Redis tem toolings completos"
+                criteria:
+                  type: string
+                  description: Evaluation criteria for the debate
+                  example: "performance, custo, operacional"
+                provider:
+                  type: string
+                  enum: [openai, anthropic, google]
+                  default: openai
+                model:
+                  type: string
+      responses:
+        '200':
+          description: Debate result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      topic:
+                        type: string
+                      winner:
+                        type: string
+                      loser:
+                        type: string
+                      reasoning:
+                        type: string
+                      arguments_submitted:
+                        type: integer
+                      debate_format:
+                        type: string
+                  meta:
+                    type: object
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        required:
+          type: array
+          items:
+            type: string
+        received:
+          type: array
+          items:
+            type: string
+
+tags:
+  - name: System
+    description: System endpoints
+  - name: Comparator
+    description: Comparison operations
+  - name: Scorer
+    description: Scoring operations
+  - name: Ranker
+    description: Ranking operations
+  - name: Extractor
+    description: Extraction operations
+  - name: Debate
+    description: Multi-agent debate operations
