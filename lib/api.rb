@@ -35,6 +35,7 @@ module AgGenie
           /api/v1/score
           /api/v1/rank
           /api/v1/extract
+          /api/v1/debate
         ]
       )
     end
@@ -253,6 +254,111 @@ module AgGenie
     rescue StandardError => e
       logger.error "Unexpected error: #{e.message}"
       halt 500, json(error: 'Internal server error', message: e.message)
+    end
+
+    # =========================================================================
+    # POST /api/v1/debate - Multi-agent debate with Comparator arbitration
+    # =========================================================================
+    post '/api/v1/debate' do
+      content_type :json
+
+      body = JSON.parse(request.body.read)
+      
+      topic = body['topic']
+      arguments = body['arguments'] # Array of { agent, position, reasoning }
+      criteria = body['criteria']
+      provider = body['provider'] || :openai
+      model = body['model']
+
+      unless topic && arguments && criteria
+        halt 400, json(
+          error: 'Missing required parameters',
+          required: %w[topic arguments criteria],
+          received: body.keys
+        )
+      end
+
+      unless arguments.is_a?(Array) && arguments.length >= 2
+        halt 400, json(
+          error: 'Arguments must be an array with at least 2 elements',
+          received_arguments: arguments.class.to_s,
+          arguments_length: arguments.is_a?(Array) ? arguments.length : 'N/A'
+        )
+      end
+
+      config = { provider_name: provider.to_sym }
+      config[:model] = model if model
+
+      # Format debate prompt for Comparator
+      debate_prompt = format_debate_prompt(topic, arguments, criteria)
+
+      # Use Comparator to arbitrate the debate
+      # We'll compare the first two arguments and iterate if there are more
+      result = arbitrate_debate(arguments, criteria, config)
+
+      json(
+        success: true,
+        data: {
+          topic: topic,
+          winner: result[:winner],
+          loser: result[:loser],
+          reasoning: result[:reasoning],
+          arguments_submitted: arguments.length,
+          debate_format: 'structured_comparison'
+        },
+        meta: {
+          provider: provider,
+          model: model || 'default'
+        }
+      )
+    rescue ActiveGenie::Error => e
+      logger.error "ActiveGenie error: #{e.message}"
+      halt 500, json(error: 'ActiveGenie processing error', message: e.message)
+    rescue JSON::ParserError => e
+      halt 400, json(error: 'Invalid JSON', message: e.message)
+    rescue StandardError => e
+      logger.error "Unexpected error: #{e.message}"
+      halt 500, json(error: 'Internal server error', message: e.message)
+    end
+
+    private
+
+    # =========================================================================
+    # Format debate prompt for Comparator
+    # =========================================================================
+    def format_debate_prompt(topic, arguments, criteria)
+      formatted_args = arguments.map_with_index do |arg, idx|
+        "Position #{idx + 1} (#{arg['agent']}): #{arg['position']}\nReasoning: #{arg['reasoning'] || 'Not provided'}"
+      end.join("\n\n")
+
+      "TOPIC: #{topic}\n\n#{formatted_args}\n\nEvaluate these positions based on: #{criteria}"
+    end
+
+    # =========================================================================
+    # Arbitrate debate using pairwise comparisons
+    # =========================================================================
+    def arbitrate_debate(arguments, criteria, config)
+      return nil unless arguments.length >= 2
+
+      # Build comparison pairs for Comparator
+      player_a = build_argument_summary(arguments[0])
+      player_b = build_argument_summary(arguments[1])
+
+      # Run Comparator
+      result = ActiveGenie::Comparator.call(player_a, player_b, criteria, config)
+
+      {
+        winner: result.data[:winner],
+        loser: result.data[:loser],
+        reasoning: result.data[:reasoning]
+      }
+    end
+
+    # =========================================================================
+    # Build argument summary for comparison
+    # =========================================================================
+    def build_argument_summary(argument)
+      "Agent: #{argument['agent']}\nPosition: #{argument['position']}\nReasoning: #{argument['reasoning'] || 'Not provided'}"
     end
   end
 end
